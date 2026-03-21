@@ -1,0 +1,10 @@
+[
+  {
+    "label": "Debug duka",
+    "adapter": "CodeLLDB",
+    "program": "D:/repos/duka/target/debug/duka.exe",
+    "request": "launch",
+    "cwd": "D:/repos/duka",
+    "pre_run_task": "cargo build",
+  },
+]
