@@ -59,7 +59,6 @@ impl TryFrom<u8> for DeviceMode {
 
 const PACKET_START: [u8; 2] = [0xFD, 0xFD];
 const PACKET_TYPE: u8 = 0x02;
-pub const DEFAULT_PASSWORD: &str = "1111";
 
 fn build_packet(device_id: &str, password: &str, function: PacketFunction, data: &[u8]) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::new();
@@ -214,7 +213,7 @@ mod tests {
 
     #[test]
     fn status_packet_checksum_is_valid() {
-        let packet = create_status_packet("dev-01", DEFAULT_PASSWORD);
+        let packet = create_status_packet("dev-01", "1111");
         let (payload, cs_bytes) = packet.split_at(packet.len() - 2);
         let expected: u16 = payload[2..].iter().map(|&b| b as u16).sum();
         let actual = u16::from_le_bytes([cs_bytes[0], cs_bytes[1]]);
@@ -223,7 +222,7 @@ mod tests {
 
     #[test]
     fn parse_response_decodes_fields_correctly() {
-        let buf = make_response("dev-01", DEFAULT_PASSWORD, &[
+        let buf = make_response("dev-01", "1111", &[
             (PacketParameter::OnOff as u8, 0x01),
             (PacketParameter::Speed as u8, 42),
             (PacketParameter::ManualSpeed as u8, 10),
@@ -240,7 +239,7 @@ mod tests {
 
     #[test]
     fn parse_response_rejects_bad_checksum() {
-        let mut buf = make_response("dev-01", DEFAULT_PASSWORD, &[
+        let mut buf = make_response("dev-01", "1111", &[
             (PacketParameter::OnOff as u8, 0x01),
         ]);
         // corrupt the checksum
@@ -251,7 +250,7 @@ mod tests {
 
     #[test]
     fn parse_response_handles_device_off() {
-        let buf = make_response("dev-01", DEFAULT_PASSWORD, &[
+        let buf = make_response("dev-01", "1111", &[
             (PacketParameter::OnOff as u8, 0x00),
         ]);
         let status = parse_response(&buf, "dev-01".to_string()).expect("should parse");

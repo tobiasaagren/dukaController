@@ -143,7 +143,7 @@ async fn set_nickname(
         Some(name) => { nicknames.insert(id, name.clone()); }
         None => { nicknames.remove(&id); }
     }
-    crate::persist::save_nicknames(&nicknames);
+    crate::persist::save_nicknames(&nicknames, &state.config.nicknames_file);
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }
@@ -172,7 +172,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_devices_empty_registry_returns_empty_array() {
-        let app = router(crate::state::new_app_state(Default::default()));
+        let app = router(crate::state::new_app_state(Default::default(), Default::default()));
         let response = app.oneshot(make_request("GET", "/devices")).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let json = body_json(response.into_body()).await;
@@ -182,7 +182,7 @@ mod tests {
     #[tokio::test]
     async fn list_devices_returns_seeded_device() {
         use std::net::{IpAddr, Ipv4Addr};
-        let state = crate::state::new_app_state(Default::default());
+        let state = crate::state::new_app_state(Default::default(), Default::default());
         {
             let mut reg = state.registry.lock().await;
             reg.insert("dev-01".to_string(), crate::state::Device {
@@ -203,7 +203,7 @@ mod tests {
 
     #[tokio::test]
     async fn device_status_unknown_id_returns_500() {
-        let app = router(crate::state::new_app_state(Default::default()));
+        let app = router(crate::state::new_app_state(Default::default(), Default::default()));
         let response = app
             .oneshot(make_request("GET", "/devices/nonexistent/status"))
             .await

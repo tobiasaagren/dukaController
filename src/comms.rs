@@ -1,23 +1,22 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use tokio::net::UdpSocket;
 
 use crate::{
-    protocol::{create_search_packet, create_set_speed_packet, create_status_packet, parse_response, DEFAULT_PASSWORD},
+    protocol::{create_search_packet, create_set_speed_packet, create_status_packet, parse_response},
     state::{AppState, Device},
 };
-
-const DUKA_PORT: u16 = 4000;
-const BROADCAST_ADDR: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 255);
 
 /// Broadcast a search packet and collect any responding devices into the registry.
 pub async fn discover_devices(state: &AppState, timeout_ms: u64) -> std::io::Result<usize> {
     let _guard = state.udp_lock.lock().await;
+    let cfg = &state.config;
 
-    let socket = UdpSocket::bind("0.0.0.0:4000").await?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", cfg.duka_port)).await?;
     socket.set_broadcast(true)?;
 
     let packet = create_search_packet();
-    let target = SocketAddr::new(IpAddr::V4(BROADCAST_ADDR), DUKA_PORT);
+    let target: SocketAddr = format!("{}:{}", cfg.broadcast_address, cfg.duka_port).parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     socket.send_to(&packet, target).await?;
 
     let deadline = tokio::time::Instant::now()
@@ -68,11 +67,12 @@ pub async fn fetch_status(state: &AppState, device_id: &str) -> std::io::Result<
         return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "device not in registry"));
     };
 
+    let cfg = &state.config;
     let _guard = state.udp_lock.lock().await;
 
-    let socket = UdpSocket::bind("0.0.0.0:4000").await?;
-    let target = SocketAddr::new(ip, DUKA_PORT);
-    let packet = create_status_packet(device_id, DEFAULT_PASSWORD);
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", cfg.duka_port)).await?;
+    let target = SocketAddr::new(ip, cfg.duka_port);
+    let packet = create_status_packet(device_id, &cfg.device_password);
     socket.send_to(&packet, target).await?;
 
     let mut buf = vec![0u8; 1024];
@@ -107,11 +107,12 @@ pub async fn set_speed(state: &AppState, device_id: &str, speed: u8) -> std::io:
         return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "device not in registry"));
     };
 
+    let cfg = &state.config;
     {
         let _guard = state.udp_lock.lock().await;
-        let socket = UdpSocket::bind("0.0.0.0:4000").await?;
-        let packet = create_set_speed_packet(device_id, DEFAULT_PASSWORD, speed);
-        socket.send_to(&packet, SocketAddr::new(ip, DUKA_PORT)).await?;
+        let socket = UdpSocket::bind(format!("0.0.0.0:{}", cfg.duka_port)).await?;
+        let packet = create_set_speed_packet(device_id, &cfg.device_password, speed);
+        socket.send_to(&packet, SocketAddr::new(ip, cfg.duka_port)).await?;
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     }
 
