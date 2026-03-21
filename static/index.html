@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Duka Controller</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    h1 span { color: #60a5fa; }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1.2rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #searchBtn {
+      background: #3b82f6;
+      color: #fff;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 1.5rem;
+      min-height: 1.2em;
+    }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      background: #1e2130;
+      border: 1px solid #2d3348;
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .device-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      cursor: pointer;
+      border-bottom: 1px dashed transparent;
+      transition: border-color 0.15s;
+    }
+
+    .device-name:hover { border-color: #475569; }
+
+    .device-name-input {
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: #151722;
+      color: #e2e8f0;
+      border: 1px solid #3b82f6;
+      border-radius: 4px;
+      padding: 0.1rem 0.3rem;
+      width: 100%;
+      outline: none;
+    }
+
+    .device-id {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .device-ip {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .pill {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+    }
+
+    .pill.on  { background: #14532d; color: #4ade80; }
+    .pill.off { background: #27272a; color: #71717a; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+    }
+
+    .stat {
+      background: #151722;
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      margin-bottom: 0.2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .stat-value.highlight { color: #60a5fa; }
+
+    .card-footer {
+      margin-top: 0.9rem;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .refreshBtn {
+      background: #1e293b;
+      color: #94a3b8;
+      font-size: 0.8rem;
+      padding: 0.35rem 0.9rem;
+    }
+
+    .speed-section {
+      margin-top: 0.9rem;
+      background: #151722;
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+    }
+
+    .speed-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.4rem;
+    }
+
+    .speed-header-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .speed-header-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #60a5fa;
+    }
+
+    .speed-section input[type=range] {
+      width: 100%;
+      accent-color: #3b82f6;
+      cursor: pointer;
+    }
+
+    .no-status {
+      font-size: 0.8rem;
+      color: #475569;
+      font-style: italic;
+    }
+
+    #empty {
+      color: #475569;
+      font-size: 0.9rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Duka <span>Controller</span></h1>
+    <button id="searchBtn" onclick="searchDevices()">Search for devices</button>
+  </header>
+
+  <p id="status"></p>
+
+  <div id="grid"></div>
+  <p id="empty" hidden>No devices found. Try searching.</p>
+
+  <script>
+    let devices = {};
+
+    function setStatus(msg) {
+      document.getElementById('status').textContent = msg;
+    }
+
+    async function searchDevices() {
+      const btn = document.getElementById('searchBtn');
+      btn.disabled = true;
+      setStatus('Searching…');
+      try {
+        const res = await fetch('/devices/search', { method: 'POST' });
+        const data = await res.json();
+        setStatus(`Search complete — ${data.found ?? 0} device(s) found.`);
+        await loadDevices();
+      } catch (e) {
+        setStatus('Search failed: ' + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadDevices() {
+      const res = await fetch('/devices');
+      const list = await res.json();
+      devices = {};
+      for (const d of list) devices[d.id] = d;
+      render();
+    }
+
+    async function saveNickname(id, value) {
+      const nickname = value.trim();
+      try {
+        await fetch(`/devices/${encodeURIComponent(id)}/nickname`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nickname }),
+        });
+        // SSE will push the updated device back; no need to manually re-render.
+      } catch (e) {
+        setStatus('Error saving nickname: ' + e.message);
+      }
+    }
+
+    function startEditNickname(id) {
+      const nameEl = document.getElementById(`name-${id}`);
+      const current = nameEl.dataset.value;
+      const input = document.createElement('input');
+      input.className = 'device-name-input';
+      input.value = current;
+
+      function commit() {
+        const value = input.value.trim();
+        // Put the span back immediately so render() is no longer blocked.
+        nameEl.dataset.value = value;
+        nameEl.textContent = value || devices[id]?.id || id;
+        input.replaceWith(nameEl);
+        saveNickname(id, value);
+      }
+
+      input.onblur = commit;
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { input.value = current; input.onblur = null; input.replaceWith(nameEl); }
+      };
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
+    async function setSpeed(id, speed) {
+      setStatus(`Setting speed ${speed} on ${id}…`);
+      try {
+        const res = await fetch(`/devices/${encodeURIComponent(id)}/speed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speed }),
+        });
+        const data = await res.json();
+        if (data.id) {
+          devices[data.id] = data;
+          render();
+          setStatus('');
+        } else {
+          setStatus('Error: ' + (data.error ?? 'unknown'));
+        }
+      } catch (e) {
+        setStatus('Error: ' + e.message);
+      }
+    }
+
+    async function refreshStatus(id) {
+      setStatus(`Fetching status for ${id}…`);
+      try {
+        const res = await fetch(`/devices/${encodeURIComponent(id)}/status`);
+        const data = await res.json();
+        if (data.id) {
+          devices[data.id] = data;
+          render();
+          setStatus('');
+        } else {
+          setStatus('Error: ' + (data.error ?? 'unknown'));
+        }
+      } catch (e) {
+        setStatus('Error: ' + e.message);
+      }
+    }
+
+    function modeLabel(mode) {
+      return { one_way: 'One-way', two_way: 'Two-way', in: 'Intake' }[mode] ?? mode ?? '—';
+    }
+
+    function renderCard(device) {
+      const s = device.last_status;
+      const isOn = s?.is_on;
+
+      const stats = s ? `
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Speed</div>
+            <div class="stat-value highlight">${s.speed ?? '—'}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Manual speed</div>
+            <div class="stat-value">${s.manual_speed ?? '—'}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Humidity</div>
+            <div class="stat-value">${s.humidity != null ? s.humidity + ' %' : '—'}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Mode</div>
+            <div class="stat-value">${modeLabel(s.ventilation_mode)}</div>
+          </div>
+        </div>
+      ` : `<p class="no-status">No status yet — press Refresh.</p>`;
+
+      return `
+        <div class="card" id="card-${device.id}">
+          <div class="card-header">
+            <div style="min-width:0;flex:1;margin-right:0.5rem">
+              <div id="name-${device.id}" class="device-name"
+                data-value="${device.nickname ?? ''}"
+                onclick="startEditNickname('${device.id}')">
+                ${device.nickname ?? device.id}
+              </div>
+              ${device.nickname ? `<div class="device-id">${device.id}</div>` : ''}
+              <div class="device-ip">${device.ip}</div>
+            </div>
+            ${s ? `<span class="pill ${isOn ? 'on' : 'off'}">${isOn ? 'ON' : 'OFF'}</span>` : ''}
+          </div>
+          ${stats}
+          <div class="speed-section">
+            <div class="speed-header">
+              <span class="speed-header-label">Speed</span>
+              <span class="speed-header-value" id="speed-val-${device.id}">${s?.speed ?? 1}</span>
+            </div>
+            <input type="range" min="1" max="3" value="${s?.speed ?? 1}"
+              oninput="document.getElementById('speed-val-${device.id}').textContent = this.value"
+              onchange="setSpeed('${device.id}', parseInt(this.value))">
+          </div>
+          <div class="card-footer">
+            <button class="refreshBtn" onclick="refreshStatus('${device.id}')">Refresh</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function render() {
+      const grid = document.getElementById('grid');
+      const empty = document.getElementById('empty');
+      const list = Object.values(devices);
+      if (list.length === 0) {
+        grid.innerHTML = '';
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      for (const device of list) {
+        // Don't re-render a card while the user is editing its nickname.
+        const editing = document.querySelector(`#card-${CSS.escape(device.id)} input.device-name-input`);
+        if (editing) continue;
+
+        const html = renderCard(device);
+        const existing = document.getElementById(`card-${device.id}`);
+        if (existing) {
+          existing.outerHTML = html;
+        } else {
+          grid.insertAdjacentHTML('beforeend', html);
+        }
+      }
+    }
+
+    // Load known devices immediately, then stream updates as they arrive.
+    loadDevices().catch(() => {});
+
+    const stream = new EventSource('/devices/stream');
+    stream.onmessage = (e) => {
+      const device = JSON.parse(e.data);
+      devices[device.id] = device;
+      render();
+    };
+    stream.onerror = () => setStatus('Stream disconnected — updates paused.');
+  </script>
+</body>
+</html>
