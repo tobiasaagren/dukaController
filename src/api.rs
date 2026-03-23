@@ -23,6 +23,8 @@ pub fn router(state: AppState) -> Router {
         .route("/devices/{id}/status", get(device_status))
         .route("/devices/{id}/speed", post(set_speed))
         .route("/devices/{id}/nickname", post(set_nickname))
+        .route("/devices/{id}/mode", post(set_mode))
+        .route("/devices/{id}/automation", post(set_automation))
         .with_state(state)
         .fallback_service(ServeDir::new("static"))
 }
@@ -115,6 +117,34 @@ async fn set_speed(
     }
 }
 
+/// POST /devices/{id}/mode — set ventilation mode (one_way | two_way | in)
+async fn set_mode(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let mode = match body["mode"].as_str() {
+        Some("one_way") => crate::protocol::DeviceMode::OneWay,
+        Some("two_way") => crate::protocol::DeviceMode::TwoWay,
+        Some("in")      => crate::protocol::DeviceMode::In,
+        _ => return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "mode must be one of: one_way, two_way, in" })),
+        ),
+    };
+
+    match comms::set_mode(&state, &id, mode).await {
+        Ok(()) => {
+            let reg = state.registry.lock().await;
+            match reg.get(&id) {
+                Some(device) => (StatusCode::OK, Json(serde_json::json!(device))),
+                None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "device not found" }))),
+            }
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))),
+    }
+}
+
 /// POST /devices/{id}/nickname — set or clear a human-readable name for a device
 async fn set_nickname(
     State(state): State<AppState>,
@@ -138,12 +168,63 @@ async fn set_nickname(
         }
     }
 
-    let mut nicknames = state.nicknames.lock().await;
-    match &nickname {
-        Some(name) => { nicknames.insert(id, name.clone()); }
-        None => { nicknames.remove(&id); }
+    let mut settings = state.settings.lock().await;
+    settings.entry(id).or_default().nickname = nickname;
+    crate::persist::save_settings(&settings, &state.config.settings_file);
+
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /devices/{id}/automation — set per-device automation speed range.
+/// Body: `{ "min_speed": 1, "max_speed": 3 }` to enable; omit either field to clear.
+async fn set_automation(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let automation_enabled = body["enabled"].as_bool().unwrap_or(false);
+    let min_speed = body["min_speed"].as_u64().map(|v| v as u8);
+    let max_speed = body["max_speed"].as_u64().map(|v| v as u8);
+    let assumed_indoor_temp_c = body["assumed_indoor_temp_c"].as_f64();
+
+    for &speed in [min_speed, max_speed].iter().flatten() {
+        if !(1..=3).contains(&speed) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "speed must be 1–3" })),
+            );
+        }
     }
-    crate::persist::save_nicknames(&nicknames, &state.config.nicknames_file);
+    if let (Some(min), Some(max)) = (min_speed, max_speed) {
+        if min > max {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": "min_speed must be <= max_speed" })),
+            );
+        }
+    }
+
+    {
+        let mut reg = state.registry.lock().await;
+        let Some(device) = reg.get_mut(&id) else {
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "device not found" })));
+        };
+        device.automation_enabled = automation_enabled;
+        device.automation_min_speed = min_speed;
+        device.automation_max_speed = max_speed;
+        device.assumed_indoor_temp_c = assumed_indoor_temp_c;
+        if let Ok(json) = serde_json::to_string(device) {
+            let _ = state.event_tx.send(json);
+        }
+    }
+
+    let mut settings = state.settings.lock().await;
+    let entry = settings.entry(id).or_default();
+    entry.automation_enabled = automation_enabled;
+    entry.automation_min_speed = min_speed;
+    entry.automation_max_speed = max_speed;
+    entry.assumed_indoor_temp_c = assumed_indoor_temp_c;
+    crate::persist::save_settings(&settings, &state.config.settings_file);
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
 }
@@ -189,7 +270,13 @@ mod tests {
                 id: "dev-01".to_string(),
                 ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)),
                 nickname: None,
+                unreachable: false,
+                consecutive_failures: 0,
                 last_status: None,
+                automation_enabled: false,
+                automation_min_speed: None,
+                automation_max_speed: None,
+                assumed_indoor_temp_c: None,
             });
         }
         let response = router(state).oneshot(make_request("GET", "/devices")).await.unwrap();

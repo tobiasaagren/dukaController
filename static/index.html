@@ -116,8 +116,19 @@
       letter-spacing: 0.03em;
     }
 
-    .pill.on  { background: #14532d; color: #4ade80; }
-    .pill.off { background: #27272a; color: #71717a; }
+    .pill.on           { background: #14532d; color: #4ade80; }
+    .pill.off          { background: #27272a; color: #71717a; }
+    .pill.unreachable  { background: #450a0a; color: #f87171; }
+
+    .card.unreachable {
+      opacity: 0.5;
+    }
+
+    .card.unreachable .speed-section input,
+    .card.unreachable .mode-btn {
+      pointer-events: none;
+      opacity: 0.4;
+    }
 
     .stats {
       display: grid;
@@ -193,6 +204,36 @@
       cursor: pointer;
     }
 
+    .mode-section {
+      margin-top: 0.6rem;
+      background: #151722;
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+    }
+
+    .mode-section .stat-label { margin-bottom: 0.5rem; }
+
+    .mode-buttons {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .mode-btn {
+      flex: 1;
+      background: #1e2130;
+      color: #64748b;
+      font-size: 0.78rem;
+      padding: 0.3rem 0;
+      border-radius: 6px;
+      border: 1px solid #2d3348;
+    }
+
+    .mode-btn.active {
+      background: #1e3a5f;
+      color: #60a5fa;
+      border-color: #3b82f6;
+    }
+
     .no-status {
       font-size: 0.8rem;
       color: #475569;
@@ -203,6 +244,102 @@
       color: #475569;
       font-size: 0.9rem;
       margin-top: 2rem;
+    }
+
+    .automation-section {
+      margin-top: 0.6rem;
+      background: #151722;
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+    }
+
+    .automation-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+    }
+
+    .auto-enable-btn {
+      background: #1e3a5f;
+      color: #60a5fa;
+      font-size: 0.78rem;
+      padding: 0.2rem 0.7rem;
+      border: 1px solid #3b82f6;
+      border-radius: 6px;
+    }
+
+    .auto-disable-btn {
+      background: #27272a;
+      color: #71717a;
+      font-size: 0.78rem;
+      padding: 0.2rem 0.7rem;
+      border-radius: 6px;
+    }
+
+    .auto-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .auto-field {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .auto-field-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      width: 2.5rem;
+    }
+
+    .speed-btns { display: flex; gap: 0.2rem; }
+
+    .speed-btn {
+      width: 1.8rem;
+      height: 1.8rem;
+      padding: 0;
+      background: #1e2130;
+      color: #64748b;
+      font-size: 0.8rem;
+      border: 1px solid #2d3348;
+      border-radius: 4px;
+    }
+
+    .speed-btn.active {
+      background: #1e3a5f;
+      color: #60a5fa;
+      border-color: #3b82f6;
+    }
+
+    .auto-temp-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .auto-temp-input {
+      width: 4.5rem;
+      background: #1e2130;
+      border: 1px solid #2d3348;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-size: 0.85rem;
+      padding: 0.15rem 0.4rem;
+      outline: none;
+    }
+
+    .auto-temp-input:focus { border-color: #3b82f6; }
+
+    .auto-temp-note {
+      font-size: 0.7rem;
+      color: #475569;
+      font-style: italic;
     }
   </style>
 </head>
@@ -288,6 +425,18 @@
       input.select();
     }
 
+    async function setMode(id, mode) {
+      try {
+        await fetch(`/devices/${encodeURIComponent(id)}/mode`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+      } catch (e) {
+        setStatus('Error setting mode: ' + e.message);
+      }
+    }
+
     async function setSpeed(id, speed) {
       setStatus(`Setting speed ${speed} on ${id}…`);
       try {
@@ -307,6 +456,46 @@
       } catch (e) {
         setStatus('Error: ' + e.message);
       }
+    }
+
+    async function saveAutomation(id, enabled, minSpeed, maxSpeed, indoorTemp) {
+      const body = { enabled: !!enabled };
+      if (minSpeed != null) body.min_speed = minSpeed;
+      if (maxSpeed != null) body.max_speed = maxSpeed;
+      if (indoorTemp != null) body.assumed_indoor_temp_c = indoorTemp;
+      try {
+        await fetch(`/devices/${encodeURIComponent(id)}/automation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        setStatus('Error saving automation: ' + e.message);
+      }
+    }
+
+    function enableAutomation(id) {
+      const d = devices[id];
+      saveAutomation(id, true, d?.automation_min_speed ?? 1, d?.automation_max_speed ?? 3, d?.assumed_indoor_temp_c ?? null);
+    }
+
+    function disableAutomation(id) {
+      const d = devices[id];
+      saveAutomation(id, false, d?.automation_min_speed ?? null, d?.automation_max_speed ?? null, d?.assumed_indoor_temp_c ?? null);
+    }
+
+    function setAutomationSpeed(id, which, value) {
+      const d = devices[id];
+      const min = which === 'min' ? value : (d?.automation_min_speed ?? 1);
+      const max = which === 'max' ? value : (d?.automation_max_speed ?? 3);
+      saveAutomation(id, d?.automation_enabled ?? false, min, max, d?.assumed_indoor_temp_c ?? null);
+    }
+
+    function saveAutomationTemp(id, value) {
+      const d = devices[id];
+      const temp = parseFloat(value);
+      if (isNaN(temp)) return;
+      saveAutomation(id, d?.automation_enabled ?? false, d?.automation_min_speed ?? null, d?.automation_max_speed ?? null, temp);
     }
 
     async function refreshStatus(id) {
@@ -330,9 +519,58 @@
       return { one_way: 'One-way', two_way: 'Two-way', in: 'Intake' }[mode] ?? mode ?? '—';
     }
 
+    function renderAutomation(device) {
+      const id = device.id;
+      const enabled = !!device.automation_enabled;
+      const min = device.automation_min_speed ?? 1;
+      const max = device.automation_max_speed ?? 3;
+      const temp = device.assumed_indoor_temp_c;
+
+      const speedBtns = (which, current) =>
+        [1, 2, 3].map(n => `
+          <button class="speed-btn ${current === n ? 'active' : ''}"
+            onclick="setAutomationSpeed('${id}', '${which}', ${n})">${n}</button>
+        `).join('');
+
+      return `
+        <div class="automation-section">
+          <div class="automation-header">
+            <span class="stat-label">Automation</span>
+            ${enabled
+              ? `<button class="auto-disable-btn" onclick="disableAutomation('${id}')">Disable</button>`
+              : `<button class="auto-enable-btn" onclick="enableAutomation('${id}')">Enable</button>`}
+          </div>
+          <div class="auto-row">
+            <div class="auto-field">
+              <span class="auto-field-label">Min</span>
+              <div class="speed-btns">${speedBtns('min', min)}</div>
+            </div>
+            <div class="auto-field">
+              <span class="auto-field-label">Max</span>
+              <div class="speed-btns">${speedBtns('max', max)}</div>
+            </div>
+          </div>
+          <div class="auto-temp-row">
+            <span class="auto-field-label">Indoor temp</span>
+            <input class="auto-temp-input" type="number" step="0.5"
+              value="${temp != null ? temp : ''}"
+              placeholder="20"
+              onchange="saveAutomationTemp('${id}', this.value)"> °C
+            ${temp == null ? `<span class="auto-temp-note">(global default)</span>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
     function renderCard(device) {
       const s = device.last_status;
       const isOn = s?.is_on;
+
+      const modes = [
+        { key: 'one_way', label: 'One-way' },
+        { key: 'two_way', label: 'Two-way' },
+        { key: 'in',      label: 'Intake' },
+      ];
 
       const stats = s ? `
         <div class="stats">
@@ -348,15 +586,24 @@
             <div class="stat-label">Humidity</div>
             <div class="stat-value">${s.humidity != null ? s.humidity + ' %' : '—'}</div>
           </div>
-          <div class="stat">
-            <div class="stat-label">Mode</div>
-            <div class="stat-value">${modeLabel(s.ventilation_mode)}</div>
+        </div>
+        <div class="mode-section">
+          <div class="stat-label">Mode</div>
+          <div class="mode-buttons">
+            ${modes.map(m => `
+              <button class="mode-btn ${s.ventilation_mode === m.key ? 'active' : ''}"
+                onclick="setMode('${device.id}', '${m.key}')">
+                ${m.label}
+              </button>`).join('')}
           </div>
         </div>
       ` : `<p class="no-status">No status yet — press Refresh.</p>`;
 
+      const pillClass = device.unreachable ? 'unreachable' : (isOn ? 'on' : 'off');
+      const pillText  = device.unreachable ? 'UNREACHABLE' : (isOn ? 'ON' : 'OFF');
+
       return `
-        <div class="card" id="card-${device.id}">
+        <div class="card${device.unreachable ? ' unreachable' : ''}" id="card-${device.id}">
           <div class="card-header">
             <div style="min-width:0;flex:1;margin-right:0.5rem">
               <div id="name-${device.id}" class="device-name"
@@ -367,7 +614,7 @@
               ${device.nickname ? `<div class="device-id">${device.id}</div>` : ''}
               <div class="device-ip">${device.ip}</div>
             </div>
-            ${s ? `<span class="pill ${isOn ? 'on' : 'off'}">${isOn ? 'ON' : 'OFF'}</span>` : ''}
+            ${s || device.unreachable ? `<span class="pill ${pillClass}">${pillText}</span>` : ''}
           </div>
           ${stats}
           <div class="speed-section">
@@ -379,6 +626,7 @@
               oninput="document.getElementById('speed-val-${device.id}').textContent = this.value"
               onchange="setSpeed('${device.id}', parseInt(this.value))">
           </div>
+          ${renderAutomation(device)}
           <div class="card-footer">
             <button class="refreshBtn" onclick="refreshStatus('${device.id}')">Refresh</button>
           </div>
@@ -389,7 +637,11 @@
     function render() {
       const grid = document.getElementById('grid');
       const empty = document.getElementById('empty');
-      const list = Object.values(devices);
+      const list = Object.values(devices).sort((a, b) => {
+        const nameA = (a.nickname || a.id).toLowerCase();
+        const nameB = (b.nickname || b.id).toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
       if (list.length === 0) {
         grid.innerHTML = '';
         empty.hidden = false;
@@ -397,8 +649,9 @@
       }
       empty.hidden = true;
       for (const device of list) {
-        // Don't re-render a card while the user is editing its nickname.
-        const editing = document.querySelector(`#card-${CSS.escape(device.id)} input.device-name-input`);
+        // Don't re-render a card while the user is editing its nickname or automation temp.
+        const editing = document.querySelector(`#card-${CSS.escape(device.id)} input.device-name-input`)
+                     || document.querySelector(`#card-${CSS.escape(device.id)} .auto-temp-input:focus`);
         if (editing) continue;
 
         const html = renderCard(device);

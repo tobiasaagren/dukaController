@@ -11,4 +11,21 @@ discovery_interval_secs = 30
 status_interval_secs = 3
 
 # Persistence
-nicknames_file = "nicknames.json"
+settings_file = "settings.json"
+
+# Humidity-based fan speed automation
+[automation]
+latitude = 54.9060026868817
+longitude = 9.779867506736698
+# How often to fetch outdoor temperature+humidity from the weather API (seconds)
+outdoor_fetch_interval_secs = 3600
+# Fallback assumed indoor temperature (°C) used to convert indoor RH% to absolute humidity.
+# Can be overridden per device via the automation API (e.g. set lower for basement devices).
+assumed_indoor_temp_c = 20.0
+# Indoor-minus-outdoor absolute humidity delta (g/m³) thresholds for each speed level.
+# At 20°C: 1.5 g/m³ ≈ 10% RH,  3.0 g/m³ ≈ 20% RH
+speed1_abs_humidity_delta = 0.0
+speed2_abs_humidity_delta = 1.5
+speed3_abs_humidity_delta = 3.0
+# How long to wait after a speed increase before allowing automation to decrease it (seconds)
+speed_decrease_lockout_secs = 3600

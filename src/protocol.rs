@@ -95,6 +95,10 @@ pub fn create_set_speed_packet(device_id: &str, password: &str, speed: u8) -> Ve
     build_packet(device_id, password, PacketFunction::Write, &[PacketParameter::Speed as u8, speed])
 }
 
+pub fn create_set_mode_packet(device_id: &str, password: &str, mode: DeviceMode) -> Vec<u8> {
+    build_packet(device_id, password, PacketFunction::Write, &[PacketParameter::VentilationMode as u8, mode as u8])
+}
+
 pub fn create_status_packet(device_id: &str, password: &str) -> Vec<u8> {
     let data = [
         PacketParameter::OnOff as u8,
