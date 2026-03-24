@@ -15,8 +15,8 @@ settings_file = "settings.json"
 
 # Humidity-based fan speed automation
 [automation]
-latitude = 54.9060026868817
-longitude = 9.779867506736698
+latitude = 55.6761
+longitude = 12.5683
 # How often to fetch outdoor temperature+humidity from the weather API (seconds)
 outdoor_fetch_interval_secs = 3600
 # Fallback assumed indoor temperature (°C) used to convert indoor RH% to absolute humidity.

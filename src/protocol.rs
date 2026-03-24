@@ -8,6 +8,7 @@
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub enum PacketFunction {
     Read      = 0x01,
     Write     = 0x02,
@@ -19,6 +20,7 @@ pub enum PacketFunction {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
+#[allow(dead_code)]
 pub enum PacketParameter {
     OnOff             = 0x01,
     Speed             = 0x02,
