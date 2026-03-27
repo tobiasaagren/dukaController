@@ -1,4 +1,7 @@
 /target
 nicknames.json
 settings.json
+config.toml
 .zed
+deploy.ps1
+duka.tar

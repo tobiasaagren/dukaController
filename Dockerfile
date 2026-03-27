@@ -10,6 +10,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs \
 
 # Build the real binary
 COPY src ./src
+COPY static ./static
 RUN touch src/main.rs && cargo build --release
 
 # Runtime stage
@@ -21,7 +22,6 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/target/release/duka .
 COPY static ./static
-COPY config.toml .
 
 EXPOSE 3000
 CMD ["./duka"]

@@ -13,10 +13,12 @@ use axum::{
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tower_http::services::ServeDir;
 
-use crate::{comms, state::AppState};
+use crate::{auth, comms, state::AppState};
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/login", get(auth::login_get).post(auth::login_post))
+        .route("/logout", post(auth::logout_post))
         .route("/devices", get(list_devices))
         .route("/devices/stream", get(device_stream))
         .route("/devices/search", post(search_devices))
@@ -25,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         .route("/devices/{id}/nickname", post(set_nickname))
         .route("/devices/{id}/mode", post(set_mode))
         .route("/devices/{id}/automation", post(set_automation))
+        .route("/outdoor", get(get_outdoor_conditions))
         .with_state(state)
         .fallback_service(ServeDir::new("static"))
 }
@@ -227,6 +230,15 @@ async fn set_automation(
     crate::persist::save_settings(&settings, &state.config.settings_file);
 
     (StatusCode::OK, Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /outdoor — latest outdoor conditions fetched by the automation task
+async fn get_outdoor_conditions(State(state): State<AppState>) -> impl IntoResponse {
+    let cond = *state.outdoor_conditions.lock().await;
+    match cond {
+        Some((temp_c, rh)) => Json(serde_json::json!({ "temp_c": temp_c, "rh": rh })),
+        None => Json(serde_json::json!(null)),
+    }
 }
 
 // Tests

@@ -1,5 +1,12 @@
 # Duka Controller configuration
-# All values shown are the defaults. Remove or comment out lines to use defaults.
+# Copy this file to config.toml and fill in the values marked CHANGEME.
+# config.toml is gitignored and should never be committed.
+
+# Web UI credentials
+username = "CHANGEME"
+password = "CHANGEME"
+# How long a login session remains valid (seconds). Default: 24 hours.
+session_ttl_secs = 86400
 
 # Network
 broadcast_address = "192.168.1.255"
@@ -15,8 +22,8 @@ settings_file = "settings.json"
 
 # Humidity-based fan speed automation
 [automation]
-latitude = 55.6761
-longitude = 12.5683
+latitude = 0.0    # CHANGEME: your location
+longitude = 0.0   # CHANGEME: your location
 # How often to fetch outdoor temperature+humidity from the weather API (seconds)
 outdoor_fetch_interval_secs = 3600
 # Fallback assumed indoor temperature (°C) used to convert indoor RH% to absolute humidity.

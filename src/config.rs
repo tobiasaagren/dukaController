@@ -40,6 +40,9 @@ impl Default for AutomationConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    pub username: String,
+    pub password: String,
+    pub session_ttl_secs: u64,
     pub broadcast_address: String,
     pub duka_port: u16,
     pub device_password: String,
@@ -52,6 +55,9 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            username: "humid".to_string(),
+            password: "dimsum".to_string(),
+            session_ttl_secs: 86400,
             broadcast_address: "192.168.1.255".to_string(),
             duka_port: 4000,
             device_password: "1111".to_string(),

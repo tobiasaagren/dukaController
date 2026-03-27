@@ -51,9 +51,17 @@
     #status {
       font-size: 0.85rem;
       color: #94a3b8;
+      min-height: 1.2em;
+    }
+
+    #outdoor-bar {
+      font-size: 0.8rem;
+      color: #64748b;
       margin-bottom: 1.5rem;
       min-height: 1.2em;
     }
+
+    #outdoor-bar span { color: #94a3b8; }
 
     #grid {
       display: grid;
@@ -260,6 +268,28 @@
       margin-bottom: 0.4rem;
     }
 
+    .auto-toggle-btn {
+      background: none;
+      color: #64748b;
+      font-size: 0.7rem;
+      padding: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .auto-toggle-btn:hover { color: #94a3b8; opacity: 1; }
+
+    .auto-chevron {
+      display: inline-block;
+      transition: transform 0.15s;
+      font-style: normal;
+    }
+
+    .auto-chevron.collapsed { transform: rotate(-90deg); }
+
     .auto-enable-btn {
       background: #1e3a5f;
       color: #60a5fa;
@@ -346,19 +376,49 @@
 <body>
   <header>
     <h1>Duka <span>Controller</span></h1>
-    <button id="searchBtn" onclick="searchDevices()">Search for devices</button>
+    <div style="display:flex;gap:0.5rem;align-items:center">
+      <button id="searchBtn" onclick="searchDevices()">Search for devices</button>
+      <form method="POST" action="/logout" style="margin:0">
+        <button type="submit" style="background:#1e293b;color:#94a3b8">Log out</button>
+      </form>
+    </div>
   </header>
 
   <p id="status"></p>
+  <p id="outdoor-bar"></p>
 
   <div id="grid"></div>
   <p id="empty" hidden>No devices found. Try searching.</p>
 
   <script>
     let devices = {};
+    const autoExpanded = new Set();
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     function setStatus(msg) {
       document.getElementById('status').textContent = msg;
+    }
+
+    async function loadOutdoor() {
+      try {
+        const res = await fetch('/outdoor');
+        const data = await res.json();
+        const bar = document.getElementById('outdoor-bar');
+        if (data && data.temp_c != null && data.rh != null) {
+          const ah = absoluteHumidity(data.temp_c, data.rh).toFixed(1);
+          bar.innerHTML = `Outdoor: <span>${data.temp_c.toFixed(1)} °C, ${data.rh} % RH — ${ah} g/m³ abs.</span>`;
+        } else {
+          bar.textContent = '';
+        }
+      } catch (_) {}
     }
 
     async function searchDevices() {
@@ -515,13 +575,30 @@
       }
     }
 
+    function absoluteHumidity(tempC, rhPercent) {
+      const eSat = 6.112 * Math.exp((17.67 * tempC) / (tempC + 243.5));
+      return (eSat * rhPercent * 2.1674) / (273.15 + tempC);
+    }
+
     function modeLabel(mode) {
       return { one_way: 'One-way', two_way: 'Two-way', in: 'Intake' }[mode] ?? mode ?? '—';
     }
 
+    function toggleAutomation(id) {
+      if (autoExpanded.has(id)) autoExpanded.delete(id);
+      else autoExpanded.add(id);
+      const device = devices[id];
+      if (device) {
+        const existing = document.getElementById(`card-${device.id}`);
+        if (existing) existing.outerHTML = renderCard(device);
+      }
+    }
+
     function renderAutomation(device) {
       const id = device.id;
+      const eid = escapeHtml(id);
       const enabled = !!device.automation_enabled;
+      const collapsed = !autoExpanded.has(id);
       const min = device.automation_min_speed ?? 1;
       const max = device.automation_max_speed ?? 3;
       const temp = device.assumed_indoor_temp_c;
@@ -529,35 +606,43 @@
       const speedBtns = (which, current) =>
         [1, 2, 3].map(n => `
           <button class="speed-btn ${current === n ? 'active' : ''}"
-            onclick="setAutomationSpeed('${id}', '${which}', ${n})">${n}</button>
+            onclick="setAutomationSpeed('${eid}', '${which}', ${n})">${n}</button>
         `).join('');
+
+      const body = collapsed ? '' : `
+        <div class="auto-row">
+          <div class="auto-field">
+            <span class="auto-field-label">Min</span>
+            <div class="speed-btns">${speedBtns('min', min)}</div>
+          </div>
+          <div class="auto-field">
+            <span class="auto-field-label">Max</span>
+            <div class="speed-btns">${speedBtns('max', max)}</div>
+          </div>
+        </div>
+        <div class="auto-temp-row">
+          <span class="auto-field-label">Indoor temp</span>
+          <input class="auto-temp-input" type="number" step="0.5"
+            value="${temp != null ? temp : ''}"
+            placeholder="20"
+            onchange="saveAutomationTemp('${eid}', this.value)"> °C
+          ${temp == null ? `<span class="auto-temp-note">(global default)</span>` : ''}
+        </div>
+      `;
 
       return `
         <div class="automation-section">
           <div class="automation-header">
-            <span class="stat-label">Automation</span>
-            ${enabled
-              ? `<button class="auto-disable-btn" onclick="disableAutomation('${id}')">Disable</button>`
-              : `<button class="auto-enable-btn" onclick="enableAutomation('${id}')">Enable</button>`}
+            <button class="auto-toggle-btn" onclick="toggleAutomation('${eid}')">
+              <i class="auto-chevron${collapsed ? ' collapsed' : ''}">▾</i> Automation
+            </button>
+            ${!collapsed
+              ? (enabled
+                ? `<button class="auto-disable-btn" onclick="disableAutomation('${eid}')">Disable</button>`
+                : `<button class="auto-enable-btn" onclick="enableAutomation('${eid}')">Enable</button>`)
+              : (enabled ? `<span class="pill on" style="font-size:0.65rem">ON</span>` : '')}
           </div>
-          <div class="auto-row">
-            <div class="auto-field">
-              <span class="auto-field-label">Min</span>
-              <div class="speed-btns">${speedBtns('min', min)}</div>
-            </div>
-            <div class="auto-field">
-              <span class="auto-field-label">Max</span>
-              <div class="speed-btns">${speedBtns('max', max)}</div>
-            </div>
-          </div>
-          <div class="auto-temp-row">
-            <span class="auto-field-label">Indoor temp</span>
-            <input class="auto-temp-input" type="number" step="0.5"
-              value="${temp != null ? temp : ''}"
-              placeholder="20"
-              onchange="saveAutomationTemp('${id}', this.value)"> °C
-            ${temp == null ? `<span class="auto-temp-note">(global default)</span>` : ''}
-          </div>
+          ${body}
         </div>
       `;
     }
@@ -565,6 +650,8 @@
     function renderCard(device) {
       const s = device.last_status;
       const isOn = s?.is_on;
+      const eid = escapeHtml(device.id);
+      const enickname = device.nickname != null ? escapeHtml(device.nickname) : null;
 
       const modes = [
         { key: 'one_way', label: 'One-way' },
@@ -586,13 +673,17 @@
             <div class="stat-label">Humidity</div>
             <div class="stat-value">${s.humidity != null ? s.humidity + ' %' : '—'}</div>
           </div>
+          <div class="stat">
+            <div class="stat-label">Abs. humidity</div>
+            <div class="stat-value">${s.humidity != null ? absoluteHumidity(device.assumed_indoor_temp_c ?? 20, s.humidity).toFixed(1) + ' g/m³' : '—'}</div>
+          </div>
         </div>
         <div class="mode-section">
           <div class="stat-label">Mode</div>
           <div class="mode-buttons">
             ${modes.map(m => `
               <button class="mode-btn ${s.ventilation_mode === m.key ? 'active' : ''}"
-                onclick="setMode('${device.id}', '${m.key}')">
+                onclick="setMode('${eid}', '${m.key}')">
                 ${m.label}
               </button>`).join('')}
           </div>
@@ -603,16 +694,16 @@
       const pillText  = device.unreachable ? 'UNREACHABLE' : (isOn ? 'ON' : 'OFF');
 
       return `
-        <div class="card${device.unreachable ? ' unreachable' : ''}" id="card-${device.id}">
+        <div class="card${device.unreachable ? ' unreachable' : ''}" id="card-${eid}">
           <div class="card-header">
             <div style="min-width:0;flex:1;margin-right:0.5rem">
-              <div id="name-${device.id}" class="device-name"
-                data-value="${device.nickname ?? ''}"
-                onclick="startEditNickname('${device.id}')">
-                ${device.nickname ?? device.id}
+              <div id="name-${eid}" class="device-name"
+                data-value="${enickname ?? ''}"
+                onclick="startEditNickname('${eid}')">
+                ${enickname ?? eid}
               </div>
-              ${device.nickname ? `<div class="device-id">${device.id}</div>` : ''}
-              <div class="device-ip">${device.ip}</div>
+              ${device.nickname ? `<div class="device-id">${eid}</div>` : ''}
+              <div class="device-ip">${escapeHtml(device.ip)}</div>
             </div>
             ${s || device.unreachable ? `<span class="pill ${pillClass}">${pillText}</span>` : ''}
           </div>
@@ -620,15 +711,15 @@
           <div class="speed-section">
             <div class="speed-header">
               <span class="speed-header-label">Speed</span>
-              <span class="speed-header-value" id="speed-val-${device.id}">${s?.speed ?? 1}</span>
+              <span class="speed-header-value" id="speed-val-${eid}">${s?.speed ?? 1}</span>
             </div>
             <input type="range" min="1" max="3" value="${s?.speed ?? 1}"
-              oninput="document.getElementById('speed-val-${device.id}').textContent = this.value"
-              onchange="setSpeed('${device.id}', parseInt(this.value))">
+              oninput="document.getElementById('speed-val-${eid}').textContent = this.value"
+              onchange="setSpeed('${eid}', parseInt(this.value))">
           </div>
           ${renderAutomation(device)}
           <div class="card-footer">
-            <button class="refreshBtn" onclick="refreshStatus('${device.id}')">Refresh</button>
+            <button class="refreshBtn" onclick="refreshStatus('${eid}')">Refresh</button>
           </div>
         </div>
       `;
@@ -664,16 +755,42 @@
       }
     }
 
-    // Load known devices immediately, then stream updates as they arrive.
+    // Load known devices and outdoor conditions immediately.
     loadDevices().catch(() => {});
+    loadOutdoor();
+    setInterval(loadOutdoor, 5 * 60 * 1000);
+
+    let disconnectTimer = null;
+    let countdown = 0;
+    let countdownInterval = null;
+
+    function clearDisconnectTimer() {
+      if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+      if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+    }
+
+    const REDIRECT_DELAY_S = 10;
 
     const stream = new EventSource('/devices/stream');
     stream.onmessage = (e) => {
+      clearDisconnectTimer();
+      setStatus('');
       const device = JSON.parse(e.data);
       devices[device.id] = device;
       render();
     };
-    stream.onerror = () => setStatus('Stream disconnected — updates paused.');
+    stream.onerror = () => {
+      if (disconnectTimer) return; // already counting down
+      countdown = REDIRECT_DELAY_S;
+      setStatus(`Connection lost — redirecting to login in ${countdown}s…`);
+      countdownInterval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          setStatus(`Connection lost — redirecting to login in ${countdown}s…`);
+        }
+      }, 1000);
+      disconnectTimer = setTimeout(() => window.location.href = '/login', REDIRECT_DELAY_S * 1000);
+    };
   </script>
 </body>
 </html>

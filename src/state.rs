@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::IpAddr, sync::Arc};
+use std::{collections::HashMap, net::IpAddr, sync::Arc, time::Instant};
 use tokio::sync::{broadcast, Mutex};
 
 use crate::{config::Config, persist::DeviceSettings, protocol::DeviceStatus};
@@ -40,6 +40,12 @@ pub struct AppState {
     pub config: Config,
     /// Broadcasts serialised Device JSON to all active SSE connections after each update.
     pub event_tx: broadcast::Sender<String>,
+    /// Active session tokens mapped to their creation time, for TTL enforcement.
+    pub sessions: Arc<Mutex<HashMap<String, Instant>>>,
+    /// Failed login attempt counts per IP (locked out after 5 failures).
+    pub login_attempts: Arc<Mutex<HashMap<IpAddr, u32>>>,
+    /// Latest outdoor conditions fetched by the automation task: (temp_c, rh_percent).
+    pub outdoor_conditions: Arc<Mutex<Option<(f64, u8)>>>,
 }
 
 pub fn new_app_state(config: Config, device_settings: HashMap<String, DeviceSettings>) -> AppState {
@@ -50,5 +56,8 @@ pub fn new_app_state(config: Config, device_settings: HashMap<String, DeviceSett
         settings: Arc::new(Mutex::new(device_settings)),
         config,
         event_tx,
+        sessions: Arc::new(Mutex::new(HashMap::new())),
+        login_attempts: Arc::new(Mutex::new(HashMap::new())),
+        outdoor_conditions: Arc::new(Mutex::new(None)),
     }
 }

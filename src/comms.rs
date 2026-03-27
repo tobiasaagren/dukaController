@@ -38,6 +38,15 @@ pub async fn discover_devices(state: &AppState, timeout_ms: u64) -> std::io::Res
                     if data.len() >= 4 + id_len {
                         let id = String::from_utf8_lossy(&data[4..4 + id_len]).to_string();
                         if id == "DEFAULT_DEVICEID" { continue; }
+                        // Reject IDs that contain characters outside [A-Za-z0-9_-].
+                        // Device IDs flow into HTML templates; anything outside this set
+                        // could break out of attribute or JS string context.
+                        if id.is_empty()
+                            || id.len() > 64
+                            || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                        {
+                            continue;
+                        }
                         let (nickname, automation_enabled, automation_min_speed, automation_max_speed, assumed_indoor_temp_c) = {
                             let s = state.settings.lock().await;
                             let entry = s.get(&id);
@@ -118,7 +127,7 @@ pub async fn fetch_status(state: &AppState, device_id: &str) -> std::io::Result<
                 let _ = state.event_tx.send(json);
             }
             if was_unreachable {
-                println!("Device {device_id} is reachable again");
+                tracing::info!("Device {device_id} is reachable again");
             }
             Ok(())
         }
@@ -126,7 +135,7 @@ pub async fn fetch_status(state: &AppState, device_id: &str) -> std::io::Result<
             device.consecutive_failures += 1;
             if device.consecutive_failures >= UNREACHABLE_THRESHOLD && !device.unreachable {
                 device.unreachable = true;
-                println!("Device {device_id} marked unreachable after {UNREACHABLE_THRESHOLD} failed attempts");
+                tracing::warn!("Device {device_id} marked unreachable after {UNREACHABLE_THRESHOLD} failed attempts");
                 if let Ok(json) = serde_json::to_string(device) {
                     let _ = state.event_tx.send(json);
                 }

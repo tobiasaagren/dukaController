@@ -29,9 +29,10 @@ pub async fn run(state: AppState) {
                 cfg.automation.longitude,
             )
             .await;
+            *state.outdoor_conditions.lock().await = outdoor_conditions;
             match outdoor_conditions {
-                Some((t, rh)) => println!("Automation: outdoor temp={t:.1}°C humidity={rh}%"),
-                None => eprintln!("Automation: failed to fetch outdoor conditions"),
+                Some((t, rh)) => tracing::info!("Automation: outdoor temp={t:.1}°C humidity={rh}%"),
+                None => tracing::warn!("Automation: failed to fetch outdoor conditions"),
             }
             last_fetch = tokio::time::Instant::now();
         }
@@ -72,7 +73,7 @@ pub async fn run(state: AppState) {
             };
 
             if target > current_speed {
-                println!(
+                tracing::info!(
                     "Automation: {id} speed {current_speed}→{target} \
                      (indoor AH={indoor_ah:.2} g/m³, outdoor AH={outdoor_ah:.2} g/m³)"
                 );
@@ -85,7 +86,7 @@ pub async fn run(state: AppState) {
                 if locked {
                     continue;
                 }
-                println!(
+                tracing::info!(
                     "Automation: {id} speed {current_speed}→{target} \
                      (indoor AH={indoor_ah:.2} g/m³, outdoor AH={outdoor_ah:.2} g/m³)"
                 );
@@ -150,6 +151,7 @@ mod tests {
             speed1_abs_humidity_delta: s1,
             speed2_abs_humidity_delta: s2,
             speed3_abs_humidity_delta: s3,
+            speed_decrease_lockout_secs: 3600
         }
     }
 
